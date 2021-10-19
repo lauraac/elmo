@@ -15,7 +15,8 @@ const app = new App({
     token: process.env.SLACK_BOT_TOKEN,
     signingSecret: process.env.SLACK_SIGNING_SECRET,
 });
-let result;
+let result,
+    selectedTime = "";
 
 // All the room in the world for your code
 moment.locale("es-mx");
@@ -43,11 +44,7 @@ const fillFields = (data, field) => {
 };
 
 // Listen for a slash command invocation
-app.command("/elmo", async({
-    ack,
-    payload,
-    context
-}) => {
+app.command("/elmo", async({ ack, payload, context }) => {
     // Acknowledge the command request
     ack();
 
@@ -92,12 +89,7 @@ app.command("/elmo", async({
 });
 
 // Handle a view_submission event
-app.view("view_incident", async({
-    ack,
-    body,
-    view,
-    context
-}) => {
+app.view("view_incident", async({ ack, body, view, context }) => {
     // Acknowledge the view_submission event
 
     await ack();
@@ -177,6 +169,9 @@ app.view("view_incident", async({
 
     blocksPostMessage[1]["text"]["text"] = " *" + title + "*";
 
+    blocksPostMessage[6]["elements"][0]["text"] =
+        "Reportado por: <@" + userID + ">";
+
     try {
         const result = await app.client.chat.postMessage({
             token: context.botToken,
@@ -186,9 +181,6 @@ app.view("view_incident", async({
         });
 
         let timestamp = result["ts"];
-        // newIncidentDatabase(timestamp, title, description, userName, userID);
-        // newIncidentApplication(timestamp, usersAffected);
-        // newIncidentUserAffected(timestamp, applicationsAffected);
     } catch (error) {
         console.error(error);
     }
@@ -208,14 +200,7 @@ app.view("view_incident", async({
 //Request Type selected
 app.action(
     "requestTypeInput",
-    async({
-        ack,
-        body,
-        say,
-        view,
-        context,
-        payload
-    }) => {
+    async({ ack, body, say, view, context, payload }) => {
         await ack();
 
         // let form = formView;
@@ -280,23 +265,38 @@ app.action(
     }
 );
 
-//Listen for severity dropdown
-app.action("actualStatus", async({
-    ack,
-    body,
-    say
-}) => {
+const removeShowTimeResolved = (body, blocks) => {
+    if (
+        body["message"]["blocks"][6]["type"] == "section" &&
+        body["message"]["blocks"][7]["type"] == "actions"
+    ) {
+        blocks.splice(6, 1);
+        blocks.splice(6, 1);
+    } else if (
+        body["message"]["blocks"][6]["type"] == "section" &&
+        body["message"]["blocks"][7]["type"] == "context"
+    ) {
+        blocks.splice(6, 1);
+    }
+};
+
+//Listen for status dropdown
+app.action("actualStatus", async({ ack, body, say }) => {
     await ack();
 
     let blocks = body["message"]["blocks"];
     let title = blocks[1]["text"]["text"];
     let description = blocks[2]["text"]["text"];
-    let selected = body["actions"][0]["selected_option"]["text"]["text"];
+    let selectedStatus = body["actions"][0]["selected_option"]["text"]["text"];
     let timestamp = body["message"]["ts"];
     let idencificador = 0;
 
-    if (selected == "Admitido") {} else if (selected == "En proceso") {} else if (selected == "Resuelto") {
-        var timeOptions = {
+    if (selectedStatus == "Admitido") {
+        removeShowTimeResolved(body, blocks);
+    } else if (selectedStatus == "En proceso") {
+        removeShowTimeResolved(body, blocks);
+    } else if (selectedStatus == "Resuelto") {
+        let timeOptions = {
             type: "section",
             block_id: "timeSpent",
             text: {
@@ -315,18 +315,22 @@ app.action("actualStatus", async({
             },
         };
 
-        var timeWorked = [
+        let timeWorked = [
             ["5 mins", 0.1],
             ["15 mins", 0.25],
             ["30 mins", 0.5],
+            ["45 mins", 0.75],
             ["1 hr", 1],
             ["2 hrs", 2],
             ["3 hrs", 3],
             ["4 hrs", 4],
+            ["6 hrs", 6],
+            ["12 hrs", 12],
+            ["18 hrs", 18],
             ["24+ hrs", 24],
         ];
-        var timeOption;
-        for (var i = 0; i < timeWorked.length; i++) {
+        let timeOption;
+        for (let i = 0; i < timeWorked.length; i++) {
             timeOption = {
                 text: {
                     type: "plain_text",
@@ -340,7 +344,6 @@ app.action("actualStatus", async({
 
         blocks.splice(6, 0, timeOptions);
     }
-
 
     const axios = require("axios");
 
@@ -362,33 +365,57 @@ app.action("actualStatus", async({
         .then((res) => {
             return String(res.status) == "200";
         });
+});
 
-    // let pagerDutySuccess = true;
-    // let pagerDutyService = null;
-    // let pagerDutyNumber = null;
+//Listen for yime dropdown
+app.action("timeSpentOption", async({ ack, body, say, context }) => {
+    await ack();
+    let timestamp = body["message"]["ts"];
+    let selected = body["actions"][0]["selected_option"]["text"]["text"];
+    let blocks = body["message"]["blocks"];
+    selectedTime = body["actions"][0]["selected_option"]["text"]["text"];
 
-    // //Only create incident for orange and red
-    // if (selected == "Orange :orange_heart:" || selected == "Red :alert:") {
-    //   pagerDutyService = "PJ5MZFZ"; //Wally Service ID
-    //   let pdResult = await newIncident(title, description, pagerDutyService);
-    //   pagerDutySuccess = pdResult[0];
-    //   pagerDutyNumber = pdResult[1];
-    // }
+    if (!blocks[8]) {
+        let template = {
+            type: "actions",
+            elements: [{
+                type: "button",
+                action_id: "markResolved",
+                text: {
+                    type: "plain_text",
+                    text: "Finalizar ticket",
+                },
+                value: "resolved",
+            }, ],
+        };
 
-    // if (pagerDutySuccess) { //TODO fix condition
-    //   console.log("")
-    //   acknowledgeMessage(timestamp, process.env.SLACK_CHANNEL, blocks, selected)
-    //   acknowledgeIncidentDatabase(timestamp, pagerDutyService, pagerDutyNumber, selected.split(" ")[0])
-    // }
+        blocks.splice(7, 0, template);
+    }
+
+    const axios = require("axios");
+
+    const headers = {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + process.env.SLACK_BOT_TOKEN,
+    };
+
+    const reqBody = {
+        channel: process.env.SLACK_CHANNEL,
+        ts: timestamp,
+        blocks: blocks,
+    };
+
+    axios
+        .post("https://slack.com/api/chat.update", reqBody, {
+            headers: headers,
+        })
+        .then((res) => {
+            return String(res.status) == "200";
+        });
 });
 
 //Listen for Investigating Button
-app.action("markInvestigating", async({
-    ack,
-    body,
-    say,
-    context
-}) => {
+app.action("markInvestigating", async({ ack, body, say, context }) => {
     await ack();
 
     let blocks = body["message"]["blocks"];
@@ -435,12 +462,7 @@ app.action("markInvestigating", async({
 });
 
 //Listen for Fixing Button
-app.action("markFixing", async({
-    ack,
-    body,
-    say,
-    context
-}) => {
+app.action("markFixing", async({ ack, body, say, context }) => {
     await ack();
 
     let blocks = body["message"]["blocks"];
@@ -487,30 +509,25 @@ app.action("markFixing", async({
 });
 
 //Listen for Resolved Button
-app.action("markResolved", async({
-    ack,
-    body,
-    say,
-    context
-}) => {
+app.action("markResolved", async({ ack, body, say, context }) => {
     await ack();
 
-    let blocks = body["message"]["blocks"];
-    let timestamp = body["message"]["ts"];
-    let userID = body["user"]["id"];
-    let userName = body["user"]["name"];
+    var blocks = body["message"]["blocks"];
+    var timestamp = body["message"]["ts"];
+    var userID = body["user"]["id"];
+    var userName = body["user"]["name"];
 
-    let userReported = blocks[8]["elements"][0]["text"];
+    var userReported = blocks[8]["elements"][0]["text"];
 
-    let userReportedID = userReported.substring(
+    var userReportedID = userReported.substring(
         userReported.lastIndexOf("@") + 1,
         userReported.lastIndexOf(">")
     );
 
-    let title = blocks[1]["text"]["text"];
+    var title = blocks[1]["text"]["text"];
 
     resolveMessage(timestamp, process.env.SLACK_CHANNEL, blocks, userID);
-    resolveIncidentDatabase(timestamp, userName);
+    // resolveIncidentDatabase(timestamp, userName)
 
     // Message the user
     try {
@@ -524,11 +541,7 @@ app.action("markResolved", async({
     }
 });
 
-app.event("app_mention", ({
-    event,
-    say,
-    context
-}) => {
+app.event("app_mention", ({ event, say, context }) => {
     // Only deal with a message that contains 'hi'
     if (/assign/i.test(event["text"]) && event["thread_ts"]) {
         let re = new RegExp("/(?<=<@).*?(?=>)/g");
@@ -670,15 +683,53 @@ function acknowledgeMessage(timestamp, channel, blocks, selected) {
 }
 
 function resolveMessage(timestamp, channel, blocks, user) {
-    blocks[6]["accessory"]["text"]["text"] = "Resolved :heavy_check_mark:";
-
-    blocks[7] = {
+    let resolvedBy = {
         type: "section",
         text: {
             type: "mrkdwn",
-            text: "*Resolved by* <@" + user + ">",
+            text: "*Resuelto por* <@" + user + ">",
         },
     };
+
+    let actualStatus = {
+        type: "section",
+        text: {
+            type: "mrkdwn",
+            text: "*Estado actual:*",
+        },
+        accessory: {
+            type: "button",
+            text: {
+                type: "plain_text",
+                text: "Resuelto :heavy_check_mark:",
+                emoji: true,
+            },
+            value: "click_me_123",
+        },
+    };
+
+    let timeResolved = {
+        type: "section",
+        text: {
+            type: "mrkdwn",
+            text: "*Tiempo de resolución del ticket:*",
+        },
+        accessory: {
+            type: "button",
+            text: {
+                type: "plain_text",
+                text: selectedTime,
+                emoji: true,
+            },
+            value: "click_me_123",
+        },
+    };
+
+    blocks.splice(8, 0, resolvedBy);
+    blocks.splice(7, 1);
+    blocks.splice(4, 1, actualStatus);
+    blocks.splice(5, 1, timeResolved);
+    blocks.splice(6, 1);
 
     const axios = require("axios");
 
@@ -702,203 +753,9 @@ function resolveMessage(timestamp, channel, blocks, user) {
         });
 }
 
-/* function newIncidentDatabase(slackTimestamp, title, description, userName, userID){
-  // Declare a new client instance from Pool()
-  const Pool = require("pg").Pool;
-  
-  const pool = new Pool({
-    user: process.env.POSTGRES_USERNAME,
-    host: process.env.POSTGRES_HOST,
-    database: process.env.POSTGRES_DB,
-    password: process.env.POSTGRES_PASSWORD,
-    port: "5432"
-  });
-  
-  let query = "INSERT INTO public.incidents(slack_timestamp,title,description,status,creation_time,reported_by, reported_by_id) VALUES ($1,$2,$3,'PENDING', NOW(),$4, $5);"
-  let values = [slackTimestamp, title, description, userName, userID]
-  
-  pool.query(query, values, (err, res)=>{
-    pool.end();
-  })
-  }
-  
-  
-function acknowledgeIncidentDatabase(slackTimestamp, pagerDutyService, pagerDutyNumber, severity){
-  // Declare a new client instance from Pool()
-  const Pool = require("pg").Pool;
-  
-  const pool = new Pool({
-    user: process.env.POSTGRES_USERNAME,
-    host: process.env.POSTGRES_HOST,
-    database: process.env.POSTGRES_DB,
-    password: process.env.POSTGRES_PASSWORD,
-    port: "5432"
-  });
-  
-  let query = "UPDATE public.incidents SET pagerduty_number = $1, pagerduty_service = $2, acknowledged_time = NOW(), status = 'ACKNOWLEDGED', severity=$3 where slack_timestamp = $4;"
-  let values = [pagerDutyNumber, pagerDutyService, severity, slackTimestamp]
-  
-  pool.query(query, values, (err, res)=>{
-    pool.end();
-  })
-}
-  
-function resolveIncidentDatabase(slackTimestamp, userName){
-  // Declare a new client instance from Pool()
-  const Pool = require("pg").Pool;
-  
-  const pool = new Pool({
-    user: process.env.POSTGRES_USERNAME,
-    host: process.env.POSTGRES_HOST,
-    database: process.env.POSTGRES_DB,
-    password: process.env.POSTGRES_PASSWORD,
-    port: "5432"
-  });
-  
-  let query = "UPDATE public.incidents SET resolved_time = NOW(), status = 'RESOLVED', resolved_by = $1 where slack_timestamp = $2;"
-  let values = [userName, slackTimestamp]
-  
-  pool.query(query, values, (err, res)=>{
-    pool.end();
-  })
-} 
-  
-function newIncidentResponsible(slackTimestamp, usersResponsibleArray){
-  
-  // Declare a new client instance from Pool()
-  const Pool = require("pg").Pool;
-  let format = require('pg-format'); //Needed for inserting multiple rows at once
-  
-  const pool = new Pool({
-    user: process.env.POSTGRES_USERNAME,
-    host: process.env.POSTGRES_HOST,
-    database: process.env.POSTGRES_DB,
-    password: process.env.POSTGRES_PASSWORD,
-    port: "5432"
-  });
-  
-  let queryParameters = [];
-  let i;
-  for (i=0; i<usersResponsibleArray.length; ++i){
-    //getUserInfo(usersResponsibleArray[i])
-    queryParameters.push([slackTimestamp, usersResponsibleArray[i]])
-  }
-  
-  let query = format("INSERT INTO public.incident_responsible (slack_timestamp,responsible) VALUES %L", queryParameters);
-  console.log(query)
-  
-  pool.query(query, (err, res)=>{
-    console.log(res)
-    console.log(err)
-    pool.end();
-  })
-}
-  
-function newIncidentApplication(slackTimestamp, applicationsAffected){
-    // Declare a new client instance from Pool()
-  const Pool = require("pg").Pool;
-  let format = require('pg-format'); //Needed for inserting multiple rows at once
-  
-  const pool = new Pool({
-    user: process.env.POSTGRES_USERNAME,
-    host: process.env.POSTGRES_HOST,
-    database: process.env.POSTGRES_DB,
-    password: process.env.POSTGRES_PASSWORD,
-    port: "5432"
-  });
-  
-  let queryParameters = [];
-  let i;
-  for (i=0; i<applicationsAffected.length; ++i){
-    queryParameters.push([slackTimestamp, applicationsAffected[i]])
-  }
-  
-  let query = format("INSERT INTO public.incident_application (slack_timestamp,application_affected) VALUES %L", queryParameters);
-  
-  pool.query(query, (err, res)=>{
-    console.log(err)
-    pool.end();
-  })
-}
-  
-function newIncidentUserAffected(slackTimestamp, usersAffected){
-  // Declare a new client instance from Pool()
-  const Pool = require("pg").Pool;
-  let format = require('pg-format'); //Needed for inserting multiple rows at once
-  
-  const pool = new Pool({
-    user: process.env.POSTGRES_USERNAME,
-    host: process.env.POSTGRES_HOST,
-    database: process.env.POSTGRES_DB,
-    password: process.env.POSTGRES_PASSWORD,
-    port: "5432"
-  });
-  
-  let queryParameters = [];
-  let i;
-  for (i=0; i<usersAffected.length; ++i){
-    queryParameters.push([slackTimestamp, usersAffected[i]])
-  }
-  
-  let query = format("INSERT INTO public.incident_user (slack_timestamp,user_affected) VALUES %L", queryParameters);
-  
-  pool.query(query, (err, res)=>{
-    console.log(err)
-    pool.end();
-  })
-}
-  
-app.command('/updateusers', async ({ ack, payload, context }) => {
-  // Acknowledge the command request
-  ack();
-  
-  const axios = require('axios');
-  
-  const headers = {
-  'Content-Type': 'application/x-www-form-urlencoded'
-  }
-  
-  axios.get("https://slack.com/api/users.list?token=" + process.env.SLACK_BOT_TOKEN, {headers: headers})
-  .then((res)=>{
-    
-    console.log(res["data"])
-    
-    let members = res["data"]["members"];
-    let memberInfo = [];
-    
-    for (let i=0; i<members.length; ++i){
-      memberInfo.push([members[i]["id"], members[i]["name"], members[i]["profile"]["real_name_normalized"], members[i]["deleted"]])
-  }
-    
-  // Declare a new client instance from Pool()
-  const Pool = require("pg").Pool;
-  let format = require('pg-format'); //Needed for inserting multiple rows at once
-  
-  const pool = new Pool({
-    user: process.env.POSTGRES_USERNAME,
-    host: process.env.POSTGRES_HOST,
-    database: process.env.POSTGRES_DB,
-    password: process.env.POSTGRES_PASSWORD,
-    port: "5432"
-  });
-    
-  let query = format("INSERT INTO public.slack_users (slack_id, slack_name, name, deleted) VALUES %L ON CONFLICT (slack_id) DO UPDATE SET slack_name = EXCLUDED.slack_name, name = EXCLUDED.name, deleted = EXCLUDED.deleted", memberInfo);
-  
-  pool.query(query, (err, res)=>{
-    console.log(err)
-    pool.end();
-  })
-  })
-  
-      
-      
-  });
-  
-*/
-
 (async() => {
     // Start your app
-    await app.start(process.env.PORT || 4000);
+    await app.start(process.env.PORT || 3000);
 
     console.log("⚡️ Bolt app is running!");
     console.log("Current channel is: " + process.env.SLACK_CHANNEL);
