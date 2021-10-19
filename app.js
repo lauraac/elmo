@@ -383,7 +383,7 @@ app.action("timeSpentOption", async({ ack, body, say, context }) => {
                 action_id: "markResolved",
                 text: {
                     type: "plain_text",
-                    text: "Finalizar ticket",
+                    text: "Finalizar Ticket",
                 },
                 value: "resolved",
             }, ],
@@ -755,7 +755,7 @@ function resolveMessage(timestamp, channel, blocks, user) {
 
 (async() => {
     // Start your app
-    await app.start(process.env.PORT || 3000);
+    await app.start(process.env.PORT || 4000);
 
     console.log("⚡️ Bolt app is running!");
     console.log("Current channel is: " + process.env.SLACK_CHANNEL);
