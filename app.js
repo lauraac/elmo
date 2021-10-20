@@ -57,7 +57,7 @@ app.command('/elmo', async({
     if (formView["blocks"][4]["block_id"] == "movementDate") {
         formView["blocks"].splice(4, 1)
 
-        // console.log(formView["blocks"][4]);
+        console.log(formView["blocks"][7]);
     }
 
     //RequestType
@@ -105,10 +105,8 @@ app.view('view_incident', async({
     let dateMovement = "";
 
     if (formView["blocks"][4]["block_id"] == "movementDate") {
-        dateMovement = view['state']['values']['movementDate']['movementDateInput']["selected_option"]["text"]["text"]
+        dateMovement = view['state']['values']['movementDate']['selectedDate']['selected_date'];
     }
-
-    console.log(dateMovement);
 
     let zubaleroName = (view['state']['values']['zubaleroName']['zubaleroNameInput']["value"]) != null ? view['state']['values']['zubaleroName']['zubaleroNameInput']["value"] : "";
     let state = (view['state']['values']['states']['statesInput']["selected_option"]) != null ? view['state']['values']['states']['statesInput']["selected_option"]["text"]["text"] : "";
@@ -123,7 +121,7 @@ app.view('view_incident', async({
 
     msg = 'Your submission for *' + title + '* was successful';
 
-    blocksPostMessage[2]["text"]["text"] = "*Fecha:* " + date + ((description) != "" ? "\n\n*Descripción:* \n" + description : "") + "\n\n*Tipo de Solicitud:* " + requestTypes + ((dateMovement) != "" ? "\n\n*Fecha de movimiento:* " + dateMovement : "") + ((zubaleroName) != "" ? "\n\n*Nombre del Zubalero:* " + zubaleroName : "") + ((state) != "" ? "\n\n*Estado:* " + state : "") + "\n\n*Cliente:* " + client + "\n\n*Equipo a cargo:* " + team + "\n\n*Prioridad:* " + priority;
+    blocksPostMessage[2]["text"]["text"] = "*Fecha:* " + date + ((description) != "" ? "\n\n*Descripción:* \n" + description : "") + "\n\n*Tipo de solicitud:* " + requestTypes + ((dateMovement) != "" ? "\n\n*Fecha de movimiento:* " + dateMovement : "") + ((zubaleroName) != "" ? "\n\n*Nombre del Zubalero:* " + zubaleroName : "") + ((state) != "" ? "\n\n*Estado:* " + state : "") + "\n\n*Cliente:* " + client + "\n\n*Equipo a cargo:* " + team + "\n\n*Prioridad:* " + priority;
 
     blocksPostMessage[1]["text"]["text"] = " *" + title + "*";
 
@@ -184,40 +182,28 @@ app.action('requestTypeInput', async({
         "type": "input",
         "block_id": "movementDate",
         "element": {
-            "type": "static_select",
-            "action_id": "movementDateInput",
+            "type": "datepicker",
+            "initial_date": date,
             "placeholder": {
                 "type": "plain_text",
-                "text": "Seleccione una opción",
+                "text": "Fecha del moviemiento",
                 "emoji": true
             },
-            "options": [{
-                    "text": {
-                        "type": "plain_text",
-                        "text": "Mayor a 5 días hábiles",
-                        "emoji": true
-                    },
-                    "value": "higher"
-                },
-                {
-                    "text": {
-                        "type": "plain_text",
-                        "text": "No mayor a 5 días hábiles",
-                        "emoji": true
-                    },
-                    "value": "notHigher"
-                }
-            ]
+            "action_id": "selectedDate"
         },
         "label": {
             "type": "plain_text",
-            "text": "Fecha del movimiento",
+            "text": "Fecha del moviemiento",
             "emoji": true
         }
     };
 
-    if (requestTypes == "Alta") {
-        blocks.splice(4, 0, template)
+    if (requestTypes == "Alta" || requestTypes == "Baja") {
+        if (blocks[4]["block_id"] == "movementDate") {
+            blocks.splice(4, 1, template)
+        } else {
+            blocks.splice(4, 0, template)
+        }
     } else if (blocks[4]["block_id"] == "movementDate") {
         blocks.splice(4, 1)
     }
@@ -444,14 +430,18 @@ app.action('markInProgress', async({
     }
 
     let timeWorked = [
-        ["5 min", 0.1],
-        ["15 min", 0.25],
-        ["30 min", 0.5],
+        ["5 mins", 0.1],
+        ["15 mins", 0.25],
+        ["30 mins", 0.5],
+        ["45 mins", 0.75],
         ["1 hr", 1],
-        ["2 hr", 2],
-        ["3 hr", 3],
-        ["4 hr", 4],
-        ["24+ hr", 24]
+        ["2 hrs", 2],
+        ["3 hrs", 3],
+        ["4 hrs", 4],
+        ["6 hrs", 6],
+        ["12 hrs", 12],
+        ["18 hrs", 18],
+        ["24+ hrs", 24]
     ];
     let timeOption;
     for (let i = 0; i < timeWorked.length; i++) {
@@ -494,7 +484,12 @@ app.action('markInProgress', async({
 });
 
 //Listen for Resolved Button
-app.action('markResolved', async({ ack, body, say, context }) => {
+app.action('markResolved', async({
+    ack,
+    body,
+    say,
+    context
+}) => {
 
     await ack();
 

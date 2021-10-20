@@ -4,7 +4,7 @@ let dateText = moment().format('LL');
 
 const formView = {
     "type": "modal",
-    "external_id": "hugoHola",
+    "external_id": "view_incidentNew",
     "callback_id": "view_incident",
     "title": {
         "type": "plain_text",
